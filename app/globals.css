@@ -5,13 +5,6 @@
   --foreground: #171717;
 }
 
-@theme inline {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
-}
-
 @media (prefers-color-scheme: dark) {
   :root {
     --background: #0a0a0a;
@@ -19,8 +12,30 @@
   }
 }
 
+/* ─── Sēlah theme tokens ─────────────────────────────────────────────
+   Dark emerald canvas + an ultra-thin "glass" surface used by the
+   journal dashboard. Consumed as Tailwind utilities, e.g.
+   bg-selah-abyss, from-selah-emerald, border-glass-edge, bg-glass-pane. */
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --font-sans: var(--font-geist-sans);
+  --font-mono: var(--font-geist-mono);
+
+  /* Emerald canvas */
+  --color-selah-abyss: #021410;      /* deepest backdrop */
+  --color-selah-emerald: #043b2c;    /* mid emerald glow */
+  --color-selah-jade: #0c5d45;       /* lifted accent */
+  --color-selah-mint: #6ee7b7;       /* highlight / verse text */
+
+  /* Ultra-thin glass surface */
+  --color-glass-pane: oklch(1 0 0 / 0.04);   /* frosted fill */
+  --color-glass-edge: oklch(1 0 0 / 0.10);   /* hairline border */
+  --color-glass-sheen: oklch(1 0 0 / 0.06);  /* top inner light */
+}
+
 body {
   background: var(--background);
   color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+  font-family: var(--font-sans), Arial, Helvetica, sans-serif;
 }
