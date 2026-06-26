@@ -2,6 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { createEntry, updateEntry, deleteEntry } from "./api";
+import { getSession } from "./dal";
 import type { Mood } from "./types";
 
 const MOODS: Mood[] = ["still", "grateful", "heavy", "hopeful", "wrestling"];
@@ -57,20 +58,26 @@ function parseEntryForm(formData: FormData) {
 /**
  * Create a journal entry via the Sēlah Express backend.
  *
- * SECURITY: Server Actions are reachable via direct POST, not just this form.
- * When auth lands, verify the session/ownership HERE before writing.
+ * Server Actions are reachable via direct POST, not just this form, so we
+ * verify the session here. The user's token is forwarded so Express ties the
+ * entry to its author server-side.
  */
 export async function createEntryAction(
   _prev: EntryFormState,
   formData: FormData,
 ): Promise<EntryFormState> {
+  const session = await getSession();
+  if (!session) {
+    return { status: "error", message: "Please sign in to save your entry." };
+  }
+
   const { fields, fieldErrors } = parseEntryForm(formData);
   if (fieldErrors) {
     return { status: "error", message: "Please fix the highlighted fields.", fieldErrors };
   }
 
   try {
-    await createEntry(fields);
+    await createEntry(fields, session.token);
   } catch (err) {
     console.error("createEntryAction failed:", err);
     return {
@@ -89,20 +96,25 @@ export async function createEntryAction(
  * (`updateEntryAction.bind(null, entry.id)`) so the form signature stays
  * `(prevState, formData)` for `useActionState`.
  *
- * SECURITY: verify the caller owns `id` once auth lands.
+ * The user's token is forwarded so Express enforces that the caller owns `id`.
  */
 export async function updateEntryAction(
   id: string,
   _prev: EntryFormState,
   formData: FormData,
 ): Promise<EntryFormState> {
+  const session = await getSession();
+  if (!session) {
+    return { status: "error", message: "Please sign in to edit this entry." };
+  }
+
   const { fields, fieldErrors } = parseEntryForm(formData);
   if (fieldErrors) {
     return { status: "error", message: "Please fix the highlighted fields.", fieldErrors };
   }
 
   try {
-    await updateEntry(id, fields);
+    await updateEntry(id, fields, session.token);
   } catch (err) {
     console.error("updateEntryAction failed:", err);
     return {
@@ -117,15 +129,19 @@ export async function updateEntryAction(
 
 /**
  * Delete an entry. Called directly from a client transition with the id, so it
- * returns a small result object instead of throwing.
- *
- * SECURITY: verify the caller owns `id` once auth lands.
+ * returns a small result object instead of throwing. The user's token is
+ * forwarded so Express enforces that the caller owns `id`.
  */
 export async function deleteEntryAction(
   id: string,
 ): Promise<{ ok: boolean; error?: string }> {
+  const session = await getSession();
+  if (!session) {
+    return { ok: false, error: "Please sign in to delete this entry." };
+  }
+
   try {
-    await deleteEntry(id);
+    await deleteEntry(id, session.token);
   } catch (err) {
     console.error("deleteEntryAction failed:", err);
     return { ok: false, error: "Couldn't delete this entry." };

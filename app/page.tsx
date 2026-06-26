@@ -1,8 +1,11 @@
 import CreateEntryForm from "./components/CreateEntryForm";
 import EntryList from "./components/EntryList";
 import { getEntries } from "./lib/entries";
+import { requireSession } from "./lib/dal";
+import { logout } from "./lib/auth-actions";
 
 export default async function Home() {
+  const session = await requireSession();
   const entries = await getEntries();
 
   return (
@@ -18,6 +21,22 @@ export default async function Home() {
       />
 
       <div className="relative z-10 flex w-full max-w-2xl flex-col gap-8">
+        {/* Signed-in bar */}
+        <div className="flex items-center justify-between text-xs">
+          <span className="text-emerald-100/50">
+            Signed in as{" "}
+            <span className="text-selah-mint/80">{session.name}</span>
+          </span>
+          <form action={logout}>
+            <button
+              type="submit"
+              className="rounded-lg border border-glass-edge bg-glass-pane px-3 py-1.5 text-emerald-100/70 backdrop-blur-sm transition hover:bg-glass-sheen hover:text-emerald-50"
+            >
+              Sign out
+            </button>
+          </form>
+        </div>
+
         {/* Masthead */}
         <header className="flex flex-col gap-2 text-center sm:text-left">
           <p className="text-xs font-medium uppercase tracking-[0.35em] text-selah-mint/70">

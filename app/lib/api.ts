@@ -1,10 +1,4 @@
-import { createWriteStream } from "node:fs";
-import { mkdir } from "node:fs/promises";
-import { randomUUID } from "node:crypto";
-import path from "node:path";
-import { Readable } from "node:stream";
-import { pipeline } from "node:stream/promises";
-import type { Attachment, Entry, Mood } from "./types";
+import type { Attachment, Entry, Mood, SessionUser } from "./types";
 
 /**
  * Thin client for the existing Sēlah Express backend (hosted on Render).
@@ -106,7 +100,11 @@ function unwrapItem(json: unknown): RawEntry {
   return asRecord(inner ?? obj);
 }
 
-async function selahFetch(path: string, init?: RequestInit): Promise<unknown> {
+async function selahFetch(
+  path: string,
+  init?: RequestInit,
+  authToken?: string,
+): Promise<unknown> {
   const { baseUrl, token } = getApiConfig();
   if (!baseUrl) {
     throw new Error(
@@ -115,7 +113,10 @@ async function selahFetch(path: string, init?: RequestInit): Promise<unknown> {
   }
 
   const headers = new Headers(init?.headers);
-  if (token) headers.set("authorization", `Bearer ${token}`);
+  // Prefer the signed-in user's token (per-user scoping); fall back to the
+  // static service token for unauthenticated/system calls.
+  const bearer = authToken ?? token;
+  if (bearer) headers.set("authorization", `Bearer ${bearer}`);
   if (init?.body) headers.set("content-type", "application/json");
 
   const res = await fetch(`${baseUrl}${path}`, {
@@ -136,8 +137,8 @@ async function selahFetch(path: string, init?: RequestInit): Promise<unknown> {
 }
 
 /** GET /entries — newest first (adjust the path/params to your API). */
-export async function fetchEntries(): Promise<Entry[]> {
-  const json = await selahFetch("/entries");
+export async function fetchEntries(authToken?: string): Promise<Entry[]> {
+  const json = await selahFetch("/entries", undefined, authToken);
   return unwrapList(json).map(toEntry);
 }
 
@@ -160,11 +161,15 @@ function toApiBody(input: Partial<NewEntryInput>) {
 }
 
 /** POST /entries — create a new entry (adjust the field names to your API). */
-export async function createEntry(input: NewEntryInput): Promise<Entry> {
-  const json = await selahFetch("/entries", {
-    method: "POST",
-    body: JSON.stringify(toApiBody(input)),
-  });
+export async function createEntry(
+  input: NewEntryInput,
+  authToken?: string,
+): Promise<Entry> {
+  const json = await selahFetch(
+    "/entries",
+    { method: "POST", body: JSON.stringify(toApiBody(input)) },
+    authToken,
+  );
   return toEntry(unwrapItem(json));
 }
 
@@ -172,71 +177,63 @@ export async function createEntry(input: NewEntryInput): Promise<Entry> {
 export async function updateEntry(
   id: string,
   input: Partial<NewEntryInput>,
+  authToken?: string,
 ): Promise<Entry> {
-  const json = await selahFetch(`/entries/${encodeURIComponent(id)}`, {
-    method: "PATCH",
-    body: JSON.stringify(toApiBody(input)),
-  });
+  const json = await selahFetch(
+    `/entries/${encodeURIComponent(id)}`,
+    { method: "PATCH", body: JSON.stringify(toApiBody(input)) },
+    authToken,
+  );
   return toEntry(unwrapItem(json));
 }
 
 /** DELETE /entries/:id — remove an entry. */
-export async function deleteEntry(id: string): Promise<void> {
-  await selahFetch(`/entries/${encodeURIComponent(id)}`, { method: "DELETE" });
+export async function deleteEntry(id: string, authToken?: string): Promise<void> {
+  await selahFetch(
+    `/entries/${encodeURIComponent(id)}`,
+    { method: "DELETE" },
+    authToken,
+  );
 }
 
 /**
- * Store an uploaded image and return its public URL.
+ * Authenticate against the Express backend and return the session user.
  *
- * Primary path: stream the binary to the Sēlah Express backend's upload
- * endpoint (fetch streams the multipart body — the file is never buffered
- * whole in memory here). ⚠️ TO CONFIRM: the route is `POST /uploads`, the
- * field is `file`, and the response carries the URL under `url`/`location`/`src`.
+ * ⚠️ TO CONFIRM: route `POST /auth/login`, JSON `{ email, password }`, and a
+ * response carrying a token (`token`/`accessToken`/`jwt`) and a user object.
  *
- * Dev fallback (no SELAH_API_URL): stream the file to `public/uploads/` so
- * the feature works locally without the backend. Not for production — most
- * hosts (Render/Vercel) have an ephemeral filesystem; point at the API there.
+ * Dev fallback (no SELAH_API_URL): accept any non-empty credentials so the app
+ * is usable locally without the backend.
  */
-export async function uploadAsset(file: File): Promise<{ url: string }> {
-  const { baseUrl, token } = getApiConfig();
+export async function loginToBackend(
+  email: string,
+  password: string,
+): Promise<SessionUser> {
+  const { baseUrl } = getApiConfig();
 
-  if (baseUrl) {
-    const body = new FormData();
-    body.append("file", file, file.name);
-    const res = await fetch(`${baseUrl}/uploads`, {
-      method: "POST",
-      headers: token ? { authorization: `Bearer ${token}` } : undefined,
-      body,
-      cache: "no-store",
-    });
-    if (!res.ok) {
-      throw new Error(`Sēlah API ${res.status} ${res.statusText} on /uploads`);
-    }
-    const json = asRecord(await res.json());
-    const url = asString(pick(json, "url", "location", "src", "uri"));
-    if (!url) throw new Error("Upload response had no URL.");
-    return { url };
+  if (!baseUrl) {
+    return { userId: "dev-user", name: email.split("@")[0] || "Friend" };
   }
 
-  return saveToPublicUploads(file);
-}
+  const res = await fetch(`${baseUrl}/auth/login`, {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ email, password }),
+    cache: "no-store",
+  });
+  if (!res.ok) throw new Error(`Sēlah API login ${res.status}`);
 
-/** Dev-only: stream a File to public/uploads and return its served path. */
-async function saveToPublicUploads(file: File): Promise<{ url: string }> {
-  const dir = path.join(process.cwd(), "public", "uploads");
-  await mkdir(dir, { recursive: true });
-
-  const safeName = file.name.replace(/[^a-zA-Z0-9._-]/g, "_") || "asset";
-  const fileName = `${randomUUID()}-${safeName}`;
-  const dest = path.join(dir, fileName);
-
-  // Stream the web ReadableStream straight to disk — no full-file buffering.
-  await pipeline(
-    Readable.fromWeb(
-      file.stream() as unknown as Parameters<typeof Readable.fromWeb>[0],
-    ),
-    createWriteStream(dest),
+  const json = asRecord(await res.json());
+  const user = asRecord(pick(json, "user") ?? json);
+  const token =
+    asString(pick(json, "token", "accessToken", "access_token", "jwt")) ||
+    undefined;
+  const userId = asString(pick(user, "id", "_id", "userId"));
+  const name = asString(
+    pick(user, "name", "displayName", "display_name"),
+    email.split("@")[0] || "Friend",
   );
+  if (!userId && !token) throw new Error("Login response had no user/token.");
 
-  return { url: `/uploads/${fileName}` };
+  return { userId: userId || "user", name, token };
 }

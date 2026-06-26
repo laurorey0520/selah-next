@@ -74,16 +74,32 @@ export default function VisionBoardEditor({
 
   async function uploadOne(id: string, file: File, previewUrl: string) {
     try {
-      const body = new FormData();
-      body.append("files", file, file.name);
-      const res = await fetch("/api/uploads", { method: "POST", body });
-      if (!res.ok) {
-        const j = await res.json().catch(() => ({}));
-        throw new Error(j.error ?? `Upload failed (${res.status})`);
+      // 1. Ask Next for a short-lived presigned upload plan (no bytes sent).
+      const planRes = await fetch("/api/uploads", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          filename: file.name,
+          contentType: file.type,
+          size: file.size,
+        }),
+      });
+      if (!planRes.ok) {
+        const j = await planRes.json().catch(() => ({}));
+        throw new Error(j.error ?? `Sign failed (${planRes.status})`);
       }
-      const { assets } = await res.json();
-      const url = assets?.[0]?.url as string | undefined;
-      if (!url) throw new Error("No URL returned");
+      const plan = await planRes.json();
+
+      // 2. Stream the file straight to the bucket (or dev receiver).
+      const putRes = await fetch(plan.uploadUrl, {
+        method: plan.method ?? "PUT",
+        headers: plan.headers,
+        body: file,
+      });
+      if (!putRes.ok) throw new Error(`Upload failed (${putRes.status})`);
+
+      // 3. Record the asset's public URL.
+      const url = plan.publicUrl as string;
       setItems((p) =>
         p.map((it) => (it.id === id ? { ...it, status: "done", url } : it)),
       );

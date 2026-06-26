@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { getEntries } from "../../lib/entries";
 import { createEntry, type NewEntryInput } from "../../lib/api";
+import { getSession } from "../../lib/dal";
 
 /**
  * /api/entries — Next-side endpoint over the Sēlah Express backend.
@@ -13,8 +14,12 @@ import { createEntry, type NewEntryInput } from "../../lib/api";
  */
 export const dynamic = "force-dynamic";
 
-/** GET /api/entries → Entry[] */
+/** GET /api/entries → Entry[] (auth required) */
 export async function GET() {
+  const session = await getSession();
+  if (!session) {
+    return NextResponse.json({ error: "Unauthorized." }, { status: 401 });
+  }
   try {
     const entries = await getEntries();
     return NextResponse.json(entries);
@@ -29,6 +34,11 @@ export async function GET() {
 
 /** POST /api/entries  { title, body, mood?, attachments? } → Entry (201) */
 export async function POST(request: Request) {
+  const session = await getSession();
+  if (!session) {
+    return NextResponse.json({ error: "Unauthorized." }, { status: 401 });
+  }
+
   let payload: Partial<NewEntryInput>;
   try {
     payload = await request.json();
@@ -44,12 +54,15 @@ export async function POST(request: Request) {
   }
 
   try {
-    const created = await createEntry({
-      title: payload.title,
-      body: payload.body,
-      mood: payload.mood,
-      attachments: payload.attachments,
-    });
+    const created = await createEntry(
+      {
+        title: payload.title,
+        body: payload.body,
+        mood: payload.mood,
+        attachments: payload.attachments,
+      },
+      session.token,
+    );
     return NextResponse.json(created, { status: 201 });
   } catch (err) {
     console.error("POST /api/entries failed:", err);

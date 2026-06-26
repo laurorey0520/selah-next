@@ -1,6 +1,7 @@
 import { cache } from "react";
 import type { Entry } from "./types";
 import { fetchEntries } from "./api";
+import { getSession } from "./dal";
 
 /**
  * The single data seam for journal entries.
@@ -16,7 +17,9 @@ export const getEntries = cache(async (): Promise<Entry[]> => {
   if (!process.env.SELAH_API_URL) {
     return SEED_ENTRIES;
   }
-  return fetchEntries();
+  // Forward the signed-in user's token so Express returns only their entries.
+  const session = await getSession();
+  return fetchEntries(session?.token);
 });
 
 const author = {

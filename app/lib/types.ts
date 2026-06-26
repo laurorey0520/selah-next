@@ -15,6 +15,14 @@ export interface User {
   avatarUrl?: string;
 }
 
+/** The authenticated user carried in the session cookie. */
+export interface SessionUser {
+  userId: string;
+  name: string;
+  /** Backend-issued bearer token, forwarded so Express scopes data per-user. */
+  token?: string;
+}
+
 /** Mood tags surfaced as a colored pip on each row. */
 export type Mood = "still" | "grateful" | "heavy" | "hopeful" | "wrestling";
 
