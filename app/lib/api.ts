@@ -136,9 +136,9 @@ async function selahFetch(
   return text ? JSON.parse(text) : null;
 }
 
-/** GET /entries — newest first (adjust the path/params to your API). */
+/** GET /api/entries — the user's entries, newest first. */
 export async function fetchEntries(authToken?: string): Promise<Entry[]> {
-  const json = await selahFetch("/entries", undefined, authToken);
+  const json = await selahFetch("/api/entries", undefined, authToken);
   return unwrapList(json).map(toEntry);
 }
 
@@ -160,37 +160,37 @@ function toApiBody(input: Partial<NewEntryInput>) {
   };
 }
 
-/** POST /entries — create a new entry (adjust the field names to your API). */
+/** POST /api/entries — create a new entry. */
 export async function createEntry(
   input: NewEntryInput,
   authToken?: string,
 ): Promise<Entry> {
   const json = await selahFetch(
-    "/entries",
+    "/api/entries",
     { method: "POST", body: JSON.stringify(toApiBody(input)) },
     authToken,
   );
   return toEntry(unwrapItem(json));
 }
 
-/** PATCH /entries/:id — update an existing entry. */
+/** PATCH /api/entries/:id — update an existing entry. */
 export async function updateEntry(
   id: string,
   input: Partial<NewEntryInput>,
   authToken?: string,
 ): Promise<Entry> {
   const json = await selahFetch(
-    `/entries/${encodeURIComponent(id)}`,
+    `/api/entries/${encodeURIComponent(id)}`,
     { method: "PATCH", body: JSON.stringify(toApiBody(input)) },
     authToken,
   );
   return toEntry(unwrapItem(json));
 }
 
-/** DELETE /entries/:id — remove an entry. */
+/** DELETE /api/entries/:id — remove an entry. */
 export async function deleteEntry(id: string, authToken?: string): Promise<void> {
   await selahFetch(
-    `/entries/${encodeURIComponent(id)}`,
+    `/api/entries/${encodeURIComponent(id)}`,
     { method: "DELETE" },
     authToken,
   );
@@ -199,41 +199,36 @@ export async function deleteEntry(id: string, authToken?: string): Promise<void>
 /**
  * Authenticate against the Express backend and return the session user.
  *
- * ⚠️ TO CONFIRM: route `POST /auth/login`, JSON `{ email, password }`, and a
- * response carrying a token (`token`/`accessToken`/`jwt`) and a user object.
+ * Matches the backend: `POST /api/login` with `{ username, password }`,
+ * responding `{ message, username, token }`.
  *
  * Dev fallback (no SELAH_API_URL): accept any non-empty credentials so the app
  * is usable locally without the backend.
  */
 export async function loginToBackend(
-  email: string,
+  username: string,
   password: string,
 ): Promise<SessionUser> {
   const { baseUrl } = getApiConfig();
 
   if (!baseUrl) {
-    return { userId: "dev-user", name: email.split("@")[0] || "Friend" };
+    return { userId: username || "dev-user", name: username || "Friend" };
   }
 
-  const res = await fetch(`${baseUrl}/auth/login`, {
+  const res = await fetch(`${baseUrl}/api/login`, {
     method: "POST",
     headers: { "content-type": "application/json" },
-    body: JSON.stringify({ email, password }),
+    body: JSON.stringify({ username, password }),
     cache: "no-store",
   });
   if (!res.ok) throw new Error(`Sēlah API login ${res.status}`);
 
   const json = asRecord(await res.json());
-  const user = asRecord(pick(json, "user") ?? json);
   const token =
     asString(pick(json, "token", "accessToken", "access_token", "jwt")) ||
     undefined;
-  const userId = asString(pick(user, "id", "_id", "userId"));
-  const name = asString(
-    pick(user, "name", "displayName", "display_name"),
-    email.split("@")[0] || "Friend",
-  );
-  if (!userId && !token) throw new Error("Login response had no user/token.");
+  const name = asString(pick(json, "username", "name", "displayName"), username);
+  if (!token) throw new Error("Login response had no token.");
 
-  return { userId: userId || "user", name, token };
+  return { userId: name, name, token };
 }

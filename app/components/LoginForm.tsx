@@ -15,15 +15,15 @@ export default function LoginForm() {
   return (
     <form action={action} className="flex flex-col gap-4">
       <div>
-        <label htmlFor="email" className={labelBase}>
-          Email
+        <label htmlFor="username" className={labelBase}>
+          Username
         </label>
         <input
-          id="email"
-          name="email"
-          type="email"
-          autoComplete="email"
-          placeholder="you@example.com"
+          id="username"
+          name="username"
+          type="text"
+          autoComplete="username"
+          placeholder="your username"
           className={fieldBase}
         />
       </div>

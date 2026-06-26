@@ -25,7 +25,9 @@ AUTH=()
 [ -n "$API_TOKEN" ] && AUTH=(-H "authorization: Bearer $API_TOKEN")
 
 echo "▶ RAW   GET $API_URL/entries"
-RAW="$(curl -s -m 20 "${AUTH[@]}" "$API_URL/entries")" || { echo "  ✗ request failed"; exit 1; }
+# Guard the array expansion: on macOS bash 3.2, "${AUTH[@]}" on an empty array
+# under `set -u` throws "unbound variable". This form expands to nothing instead.
+RAW="$(curl -s -m 20 "${AUTH[@]+"${AUTH[@]}"}" "$API_URL/entries")" || { echo "  ✗ request failed"; exit 1; }
 
 printf '%s' "$RAW" | python3 - <<'PY'
 import sys, json

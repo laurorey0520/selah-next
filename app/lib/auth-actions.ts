@@ -15,15 +15,15 @@ export async function login(
   _prev: LoginState,
   formData: FormData,
 ): Promise<LoginState> {
-  const email = String(formData.get("email") ?? "").trim();
+  const username = String(formData.get("username") ?? "").trim();
   const password = String(formData.get("password") ?? "");
 
-  if (!email || !password) {
-    return { error: "Email and password are required." };
+  if (!username || !password) {
+    return { error: "Username and password are required." };
   }
 
   try {
-    const user = await loginToBackend(email, password);
+    const user = await loginToBackend(username, password);
     await createSession(user);
   } catch (err) {
     console.error("login failed:", err);
