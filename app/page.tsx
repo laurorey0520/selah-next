@@ -1,4 +1,10 @@
-export default function Home() {
+import CreateEntryForm from "./components/CreateEntryForm";
+import EntryList from "./components/EntryList";
+import { getEntries } from "./lib/entries";
+
+export default async function Home() {
+  const entries = await getEntries();
+
   return (
     <main className="relative flex min-h-screen flex-1 flex-col items-center overflow-hidden bg-selah-abyss px-6 py-16 sm:py-24">
       {/* Ambient emerald glow */}
@@ -26,7 +32,10 @@ export default function Home() {
           </p>
         </header>
 
-        {/* Ultra-thin glass container — ready for SQL entry rows */}
+        {/* Compose a new reflection */}
+        <CreateEntryForm />
+
+        {/* Ultra-thin glass container — SQL/Express entry rows render here */}
         <section
           aria-label="Journal entries"
           className="rounded-2xl border border-glass-edge bg-glass-pane shadow-2xl shadow-black/40 backdrop-blur-xl ring-1 ring-inset ring-glass-sheen"
@@ -34,24 +43,11 @@ export default function Home() {
           <div className="flex items-center justify-between border-b border-glass-edge px-6 py-4">
             <h2 className="text-sm font-medium text-emerald-50">Recent entries</h2>
             <span className="rounded-full border border-glass-edge px-2.5 py-0.5 text-xs text-selah-mint/70">
-              0 entries
+              {entries.length} {entries.length === 1 ? "entry" : "entries"}
             </span>
           </div>
 
-          {/* Entry rows render here — one <article> per row from the database */}
-          <ul className="divide-y divide-glass-edge">
-            {/* Empty state until the first SQL row arrives */}
-            <li className="flex flex-col items-center gap-2 px-6 py-16 text-center">
-              <span className="text-2xl">🌿</span>
-              <p className="text-sm font-medium text-emerald-50">
-                No entries yet
-              </p>
-              <p className="max-w-xs text-xs leading-5 text-emerald-100/50">
-                Once you connect the database, your reflections will appear here
-                as gentle rows of glass.
-              </p>
-            </li>
-          </ul>
+          <EntryList entries={entries} />
         </section>
       </div>
     </main>
